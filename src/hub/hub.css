@@ -162,7 +162,17 @@
   display: flex; align-items: center; gap: 14px; padding: 8px 10px 8px 16px;
   background: var(--hx-card); border-radius: 14px; box-shadow: 0 8px 24px rgba(31, 41, 51, 0.08);
 }
-.hx-toolbar input[type='range'] { flex: 1; accent-color: var(--hx-amber); min-width: 80px; }
+.hx-track { flex: 1; min-width: 80px; display: flex; flex-direction: column; gap: 3px; padding-top: 4px; container-type: inline-size; }
+.hx-track input[type='range'] { width: 100%; margin: 0; accent-color: var(--hx-amber); }
+/* 刻度左右各留半個滑桿圓鈕寬,對齊圓鈕中心的移動範圍 */
+.hx-ticks { position: relative; height: 18px; margin: 0 8px; }
+.hx-ticks span { position: absolute; top: 0; width: 1px; height: 4px; background: #cfcac0; }
+.hx-ticks span.major { height: 6px; background: #9aa0a8; }
+.hx-ticks b { position: absolute; top: 8px; left: 0; transform: translateX(-50%); font-size: 10.5px; font-weight: 500; line-height: 1; color: var(--hx-muted); font-variant-numeric: tabular-nums; }
+/* 進度條較窄時只標 00、06、12、18、24 */
+@container (max-width: 200px) {
+  .hx-ticks span:not(.six) b { display: none; }
+}
 .hx-toolbar .hx-play { flex: none; width: 36px; height: 36px; border: 0; border-radius: 10px; background: var(--hx-dark); color: #fff; font-weight: 700; }
 .hx-speed { display: flex; background: #f0eee8; border-radius: 10px; padding: 3px; gap: 2px; }
 .hx-speed button { border: 0; background: none; min-width: 40px; height: 30px; padding: 0 6px; border-radius: 8px; font-weight: 700; color: var(--hx-muted); }

@@ -405,7 +405,17 @@ function Toolbar() {
           <button key={sp.v} className={s.speed === sp.v ? 'on' : ''} onClick={() => { s.setSpeed(sp.v); s.setPlaying(true) }}>{sp.label}</button>
         ))}
       </div>
-      <input type="range" min={0} max={1439} value={Math.floor(s.time)} onChange={(e) => s.setTime(Number(e.target.value))} aria-label="時間" />
+      <div className="hx-track">
+        <input type="range" min={0} max={1439} value={Math.floor(s.time)} onChange={(e) => s.setTime(Number(e.target.value))} aria-label="時間" />
+        {/* 時間刻度:每小時一格,每 3 小時標數字 */}
+        <div className="hx-ticks" aria-hidden="true">
+          {Array.from({ length: 25 }, (_, h) => (
+            <span key={h} className={h % 6 === 0 ? 'major six' : h % 3 === 0 ? 'major' : ''} style={{ left: `${(h / 24) * 100}%` }}>
+              {h % 3 === 0 && <b>{String(h).padStart(2, '0')}</b>}
+            </span>
+          ))}
+        </div>
+      </div>
       <div className="hx-tools">
         <button className={s.showLabels ? 'on' : ''} onClick={() => s.setShowLabels(!s.showLabels)}>全部標籤</button>
         <button className={s.onlyLow ? 'on' : ''} onClick={() => s.setOnlyLow(!s.onlyLow)}>只看 &lt;80%</button>
