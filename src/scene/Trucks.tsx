@@ -3,13 +3,13 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { EffTrip } from '../data/types'
 import { ISLAND_TOP, pointAt, progressAt, routeCurve, tangentAt } from '../lib/geo'
-import { loadLevel } from '../lib/effective'
+import { isEmptyRun, truckLevel } from '../lib/effective'
 import { useSceneTrips } from '../lib/selectors'
 import { useStore } from '../store'
 
 const MAX = 420 // 單日車趟上限約 330 趟
 
-export const LOAD_COLOR = { good: '#3ccf7a', watch: '#f5b93a', bad: '#ef4d4d' } as const
+export const LOAD_COLOR = { good: '#3ccf7a', watch: '#f5b93a', bad: '#ef4d4d', empty: '#9aa3ab' } as const
 const DIM = new THREE.Color('#3a4249')
 const CAB = new THREE.Color('#d9dee2')
 
@@ -61,7 +61,7 @@ export function Trucks() {
     const color = new THREE.Color()
     live.forEach((t, i) => {
       const dim = bucketFilter !== null && t.bk !== bucketFilter
-      color.set(dim ? DIM : LOAD_COLOR[loadLevel(t.eLr)])
+      color.set(dim ? DIM : LOAD_COLOR[truckLevel(t)])
       body.current?.setColorAt(i, color)
       gauge.current?.setColorAt(i, color)
       cab.current?.setColorAt(i, dim ? DIM : CAB)
@@ -99,8 +99,8 @@ export function Trucks() {
       dummy.scale.set(0.38 * k, 0.52 * k, 0.54 * k)
       dummy.updateMatrix()
       c.setMatrixAt(i, dummy.matrix)
-      // 上方裝載率柱:高度 = 裝載率
-      const h = (0.1 + Math.min(t.eLr, 100) / 100 * 1.8) * k
+      // 上方裝載率柱:高度 = 裝載率;空車只留底座
+      const h = (0.1 + (isEmptyRun(t) ? 0 : Math.min(t.eLr, 100) / 100 * 1.8)) * k
       dummy.position.set(ps.x, y + 0.43 * k + h / 2, ps.z)
       dummy.rotation.set(0, 0, 0)
       dummy.scale.set(0.18 * k, h, 0.18 * k)

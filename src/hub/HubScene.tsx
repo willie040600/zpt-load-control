@@ -4,13 +4,13 @@ import { Html, Line, MapControls } from '@react-three/drei'
 import * as THREE from 'three'
 import type { MapControls as MapControlsImpl } from 'three-stdlib'
 import { BUCKETS } from '../data/codes'
-import { loadLevel } from '../lib/effective'
+import { isEmptyRun, truckLevel } from '../lib/effective'
 import { Ticker } from '../scene/Trucks'
 import { useStore } from '../store'
-import { DOCK, HUBS, ROAD_GAP, poseAt, truckLength, type HubLayout, type HubTrip } from './layout'
+import { DOCK, HUBS, ROAD_GAP, poseAt, truckLength, type HubLayout, type HubTrip, type Phase } from './layout'
 import { useHubDay } from './useHub'
 
-const STRIPE = { good: '#2fa866', watch: '#e8a317', bad: '#e0483e' } as const
+const STRIPE = { good: '#2fa866', watch: '#e8a317', bad: '#e0483e', empty: '#7d858f' } as const
 const DIM = '#b9bec4'
 const FLOOR_Y = 0.4
 
@@ -279,12 +279,15 @@ function Truck({ it, hub }: { it: HubTrip; hub: HubLayout }) {
   const selected = useStore((s) => s.selected?.kind === 'trip' && s.selected.id === it.t.id)
   const showLabels = useStore((s) => s.showLabels)
   const groupFilter = useStore((s) => s.groupFilter)
-  const [docked, setDocked] = useState(false)
+  const [phase, setPhase] = useState<Phase | null>(null)
   const t = it.t
   const L = truckLength(t.eTn)
   const dim = groupFilter !== null && groupOf(t) !== groupFilter
-  const stripe = dim ? DIM : STRIPE[loadLevel(t.eLr)]
+  // 車上沒貨的時段顯示灰色:發車車輛進場等裝貨、進站車輛卸完離場
+  const bare = (it.dir === 'out' && phase === 'approach') || (it.dir === 'in' && phase === 'leave')
+  const stripe = dim ? DIM : STRIPE[bare ? 'empty' : truckLevel(t)]
   const trailer = L - 2.4
+  const docked = phase === 'dock'
 
   useFrame(() => {
     const ps = poseAt(it, hub, useStore.getState().time)
@@ -293,8 +296,7 @@ function Truck({ it, hub }: { it: HubTrip; hub: HubLayout }) {
     if (!ps) return
     g.current.position.set(ps.x, 0, ps.z)
     g.current.rotation.y = ps.yaw
-    const d = ps.phase === 'dock'
-    if (d !== docked) setDocked(d)
+    if (ps.phase !== phase) setPhase(ps.phase)
   })
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
@@ -345,7 +347,7 @@ function Truck({ it, hub }: { it: HubTrip; hub: HubLayout }) {
       {(selected || (docked && !dim && (showLabels || t.eLr < 80))) && (
         <Html position={[0, 5.2, 0]} center className={'hx-tag' + (selected ? ' on' : '')} zIndexRange={[20, 10]}>
           <span className="dot" style={{ background: stripe }} />
-          {shortName(other)} {Math.round(t.eLr)}%
+          {shortName(other)} {isEmptyRun(t) ? '空車' : bare ? (it.dir === 'out' ? '待裝貨' : '已卸空') : `${Math.round(t.eLr)}%`}
         </Html>
       )}
     </group>

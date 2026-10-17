@@ -45,3 +45,15 @@ export function loadLevel(lr: number): LoadLevel {
   if (lr >= 80) return 'watch'
   return 'bad'
 }
+
+// 卡車顏色等級:沒載貨(總籠數 0,只載空籠車回送)的空車一律灰色,
+// 不看系統裝載率(系統裝載率會把空籠車算進去)
+export type TruckLevel = LoadLevel | 'empty'
+
+export function isEmptyRun(t: EffTrip): boolean {
+  return !t.removed && t.eN === 0
+}
+
+export function truckLevel(t: EffTrip): TruckLevel {
+  return isEmptyRun(t) ? 'empty' : loadLevel(t.eLr)
+}

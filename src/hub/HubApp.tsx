@@ -3,7 +3,7 @@ import { BUCKETS, DEFAULT_REASON, GROUP_COLOR, GROUP_LABEL, REASON_CODES, TYPE_L
 import { DATES, TRIPS_BY_DATE, TRIP_BY_ID, WEEKDAY, weekdayOf } from '../data/load'
 import { TAIWAN_OUTLINE } from '../data/nodes'
 import type { EffTrip, HubName, TripType } from '../data/types'
-import { adoptKey, effective, emptyCost, loadLevel } from '../lib/effective'
+import { adoptKey, effective, emptyCost, isEmptyRun, truckLevel } from '../lib/effective'
 import { computeKpis } from '../lib/kpi'
 import { fmtMoney, fmtTime } from '../lib/selectors'
 import { useStore } from '../store'
@@ -12,7 +12,12 @@ import { HUBS, HUB_ORDER, dockLabel, hubOf, phaseLabel, poseAt, type HubTrip } f
 import { jumpToBusiest, useHubDay } from './useHub'
 import './hub.css'
 
-const LEVEL_COLOR = { good: '#2fa866', watch: '#e8a317', bad: '#e0483e' } as const
+const LEVEL_COLOR = { good: '#2fa866', watch: '#e8a317', bad: '#e0483e', empty: '#7d858f' } as const
+
+// 裝載率文字;空車不顯示系統裝載率(含空籠車)
+function lrText(t: EffTrip): string {
+  return isEmptyRun(t) ? '空車' : `${Math.round(t.eLr)}%`
+}
 // 播放速度:1× = 每秒推進 5 分鐘
 const SPEEDS = [
   { v: 2.5, label: '0.5×' },
@@ -126,13 +131,13 @@ function Events() {
       {list.length === 0 && <div className="hx-empty">這段時間沒有進出車趟</div>}
       {list.map(({ it }) => {
         const t = it.t
-        const lvl = loadLevel(t.eLr)
+        const lvl = truckLevel(t)
         return (
           <button key={t.id} className="hx-event" onClick={() => focusTrip(it)}>
             <span className="hx-ev-time">{fmtTime(it.ev)}</span>
             <span className="hx-ev-dot" style={{ background: LEVEL_COLOR[lvl] }} />
             <span className={'hx-ev-text' + (lvl === 'bad' ? ' strong' : '')}>
-              {it.dir === 'out' ? `${t.x} ${TYPE_LABEL[t.ty]}發車` : `${t.o} ${TYPE_LABEL[t.ty]}抵達`}・{t.eTn}噸 {Math.round(t.eLr)}%
+              {it.dir === 'out' ? `${t.x} ${TYPE_LABEL[t.ty]}發車` : `${t.o} ${TYPE_LABEL[t.ty]}抵達`}・{t.eTn}噸 {lrText(t)}
             </span>
           </button>
         )
@@ -245,7 +250,7 @@ function TripPanel({ id }: { id: string }) {
   const t: EffTrip = effective(raw, 'current', false, s.adopted)
   const it = items.find((i) => i.t.id === id)
   const pose = it ? poseAt(it, HUBS[s.hub], s.time) : null
-  const lvl = loadLevel(t.eLr)
+  const lvl = truckLevel(t)
   const key = adoptKey(raw)
   const adopted = !!s.adopted[key]
   const group = raw.gid ? (TRIPS_BY_DATE.get(raw.d) ?? []).filter((x) => x.gid === raw.gid && x.id !== raw.id) : []
@@ -269,6 +274,7 @@ function TripPanel({ id }: { id: string }) {
       <div className="hx-sec-head"><b>裝載</b><span>{t.eN} / {t.eCap} 籠・{Math.round(t.eLr)}%</span></div>
       <Cages n={Math.min(t.eN, t.eCap)} cap={t.eCap} color={LEVEL_COLOR[lvl]} />
       {t.changed && !t.removed && <div className="hx-note">原為 {raw.tn} 噸 {raw.n} 籠 {Math.round(raw.lr)}%(已採納建議)</div>}
+      {isEmptyRun(t) && <div className="hx-note">空車:沒有載貨,只載空籠車 {raw.ec ?? 0} 個回送;系統裝載率 {Math.round(raw.lr)}% 含空籠車</div>}
 
       <div className="hx-stats">
         <div><span>發車</span><b>{fmtTime(raw.h)}</b></div>
@@ -358,7 +364,7 @@ function HubSummary() {
       <div className="hx-sec-head"><b>空載最高車趟</b><span>TOP {lows.length}</span></div>
       {lows.map((it) => (
         <button key={it.t.id} className="hx-row" onClick={() => focusTrip(it)}>
-          <span className="hx-row-lr" style={{ color: LEVEL_COLOR[loadLevel(it.t.eLr)] }}>{Math.round(it.t.eLr)}%</span>
+          <span className="hx-row-lr" style={{ color: LEVEL_COLOR[truckLevel(it.t)] }}>{lrText(it.t)}</span>
           <span className="hx-row-main"><b>{it.t.o} → {it.t.x}</b><span>{TYPE_LABEL[it.t.ty]} {it.t.eTn}噸・{fmtTime(it.ev)} {it.dir === 'out' ? '發車' : '抵達'}</span></span>
           <span className="hx-row-emp">{Math.round(emptyCost(it.t)).toLocaleString('zh-TW')}</span>
         </button>
@@ -367,6 +373,7 @@ function HubSummary() {
         <span><i style={{ background: LEVEL_COLOR.good }} />≥90%</span>
         <span><i style={{ background: LEVEL_COLOR.watch }} />80–90%</span>
         <span><i style={{ background: LEVEL_COLOR.bad }} />&lt;80%</span>
+        <span><i style={{ background: LEVEL_COLOR.empty }} />空車</span>
         <span><i style={{ background: '#8fb8de' }} />低溫籠車</span>
       </div>
     </div>
