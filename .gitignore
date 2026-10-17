@@ -1,0 +1,30 @@
+# 宅配通原始資料:含司機姓名、車牌、電話、客戶地址,不可上傳
+宅配通資料/
+analysis/data/
+analysis/out/
+*.xlsx
+*.xls
+*.csv
+*.pkl
+~$*
+
+# 套件與建置產物
+node_modules/
+dist/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Claude Code 個人設定
+.claude/
+
+# 環境變數、編輯器與系統檔
+.env
+.env.*
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
