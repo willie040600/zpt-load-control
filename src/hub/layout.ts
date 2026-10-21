@@ -43,10 +43,11 @@ export type Dir = 'in' | 'out'
 export interface HubTrip {
   t: EffTrip
   dir: Dir
-  dock: number // 碼頭序號;碼頭滿時為 -1,停在臨時車位
-  yard: number // 臨時車位序號
-  ev: number // 發車或抵達時刻(分鐘)
-  d0: number // 靠碼頭開始
+  dock: number // 碼頭序號
+  yard: number // 排隊時的臨時車位序號;不需排隊為 -1
+  ev: number // 資料上的發車或抵達時刻(分鐘)
+  q0: number // 抵達臨時車位開始排隊;不需排隊時等於 d0
+  d0: number // 靠碼頭開始(排隊時延後)
   d1: number // 離開碼頭
 }
 
@@ -56,20 +57,22 @@ export function directionOf(t: EffTrip, hub: HubLayout): Dir | null {
   return null
 }
 
-// 依時間順序把車趟分到碼頭;沒有空碼頭時停到臨時車位
+// 依時間順序把車趟分到碼頭;碼頭全滿時先到臨時車位排隊,最早空出的碼頭一空就開進去,
+// 裝卸時間不變、整段往後延。等待不超過一段進場行駛時間的,直接晚一點進場,不進臨時車位
 export function schedule(trips: EffTrip[], hub: HubLayout): HubTrip[] {
   const items: HubTrip[] = []
   for (const t of trips) {
     if (t.removed) continue
     const dir = directionOf(t, hub)
     if (!dir) continue
-    if (dir === 'out') items.push({ t, dir, dock: -1, yard: -1, ev: t.h, d0: t.h - LOAD_MIN, d1: t.h })
+    if (dir === 'out') items.push({ t, dir, dock: -1, yard: -1, ev: t.h, q0: t.h - LOAD_MIN, d0: t.h - LOAD_MIN, d1: t.h })
     else {
       const arr = (t.h + t.du) % 1440
-      items.push({ t, dir, dock: -1, yard: -1, ev: arr, d0: arr, d1: arr + UNLOAD_MIN })
+      items.push({ t, dir, dock: -1, yard: -1, ev: arr, q0: arr, d0: arr, d1: arr + UNLOAD_MIN })
     }
   }
   items.sort((a, b) => a.d0 - b.d0)
+  // 各碼頭可以開始進場的時刻(上一台離開碼頭再駛離之後)
   const free: Record<Dir, number[]> = {
     in: Array(hub.inDocks).fill(-Infinity),
     out: Array(hub.outDocks).fill(-Infinity),
@@ -77,16 +80,22 @@ export function schedule(trips: EffTrip[], hub: HubLayout): HubTrip[] {
   const yardFree: number[] = []
   for (const it of items) {
     const docks = free[it.dir]
-    const i = docks.findIndex((f) => f <= it.d0 - MOVE_MIN)
-    if (i >= 0) {
-      it.dock = i
-      docks[i] = it.d1 + MOVE_MIN
-    } else {
-      let y = yardFree.findIndex((f) => f <= it.d0)
-      if (y < 0) { y = yardFree.length; yardFree.push(0) }
-      it.yard = y
-      yardFree[y] = it.d1
+    let i = docks.findIndex((f) => f <= it.d0 - MOVE_MIN)
+    if (i < 0) {
+      i = docks.indexOf(Math.min(...docks))
+      const wait = docks[i] + MOVE_MIN - it.d0
+      it.d0 += wait
+      it.d1 += wait
+      if (wait > MOVE_MIN) {
+        it.q0 = it.d0 - wait
+        let y = yardFree.findIndex((f) => f <= it.q0 - MOVE_MIN)
+        if (y < 0) { y = yardFree.length; yardFree.push(0) }
+        it.yard = y
+        yardFree[y] = it.d0
+      } else it.q0 = it.d0
     }
+    it.dock = i
+    docks[i] = it.d1 + MOVE_MIN
   }
   return items
 }
@@ -106,7 +115,7 @@ export function truckLength(tn: number): number {
   return 8.5
 }
 
-export type Phase = 'approach' | 'dock' | 'leave'
+export type Phase = 'approach' | 'queue' | 'dock' | 'leave'
 
 export interface Pose {
   x: number
@@ -141,16 +150,50 @@ export function yardPoint(hub: HubLayout, yard: number) {
   return { x: -hub.W / 2 + 6 + yard * 4.2, z: hub.D / 2 + ROAD_GAP + 14, yaw: YAW_PZ }
 }
 
-export function poseAt(it: HubTrip, hub: HubLayout, time: number): Pose | null {
-  const s = rel(time, it.d0)
-  const dur = it.d1 - it.d0
-  if (s < -MOVE_MIN || s > dur + MOVE_MIN) return null
-  const L = truckLength(it.t.eTn)
-  if (it.dock < 0) {
-    if (s < 0 || s > dur) return null
-    const y = yardPoint(hub, it.yard)
-    return { ...y, phase: 'dock', p: s / dur }
+// 沿折線等速移動,k 為 0–1;rev 列出倒車的路段(車頭朝移動的反方向)
+function along(pts: [number, number][], k: number, rev: number[] = []): { x: number; z: number; yaw: number } {
+  const lens = pts.slice(1).map(([x, z], i) => Math.hypot(x - pts[i][0], z - pts[i][1]))
+  let dist = Math.min(1, Math.max(0, k)) * lens.reduce((a, b) => a + b, 0)
+  let i = 0
+  while (i < lens.length - 1 && dist > lens[i]) dist -= lens[i++]
+  const [ax, az] = pts[i]
+  const [bx, bz] = pts[i + 1]
+  const f = lens[i] > 0 ? dist / lens[i] : 1
+  const yaw = Math.atan2(-(bz - az), bx - ax) + (rev.includes(i) ? Math.PI : 0)
+  return { x: lerp(ax, bx, f), z: lerp(az, bz, f), yaw }
+}
+
+// 排隊車輛:沿道路開進臨時車位、等候,碼頭空出後倒出車位、開到碼頭倒車靠好
+function queuePose(it: HubTrip, hub: HubLayout, s: number, L: number): Pose | null {
+  const wait = it.d0 - it.q0
+  const y = yardPoint(hub, it.yard)
+  const d = dockPoint(hub, it.dir, it.dock, L)
+  const roadZ = hub.D / 2 + ROAD_GAP
+  const roadX = hub.W / 2 + ROAD_GAP
+  if (s < 0) {
+    const k = (s + MOVE_MIN) / MOVE_MIN
+    const path: [number, number][] = it.dir === 'out'
+      ? [[-hub.W / 2 - 70, roadZ], [y.x, roadZ], [y.x, y.z]]
+      : [[roadX, -hub.D / 2 - 70], [roadX, roadZ], [y.x, roadZ], [y.x, y.z]]
+    return { ...along(path, k), phase: 'approach', p: 0 }
   }
+  if (s <= wait - MOVE_MIN) return { ...y, phase: 'queue', p: 0 }
+  const k = (s - (wait - MOVE_MIN)) / MOVE_MIN
+  if (it.dir === 'out') {
+    return { ...along([[y.x, y.z], [y.x, roadZ], [d.x, roadZ], [d.x, d.z]], k, [0, 2]), phase: 'approach', p: 0 }
+  }
+  return { ...along([[y.x, y.z], [y.x, roadZ], [roadX, roadZ], [roadX, d.z], [d.x, d.z]], k, [0, 3]), phase: 'approach', p: 0 }
+}
+
+export function poseAt(it: HubTrip, hub: HubLayout, time: number): Pose | null {
+  // 以抵達(排隊或靠碼頭)時刻為基準的相對時間
+  const s0 = rel(time, it.q0)
+  const wait = it.d0 - it.q0
+  const s = s0 - wait
+  const dur = it.d1 - it.d0
+  if (s0 < -MOVE_MIN || s > dur + MOVE_MIN) return null
+  const L = truckLength(it.t.eTn)
+  if (it.yard >= 0 && s < 0) return queuePose(it, hub, s0, L)
   const d = dockPoint(hub, it.dir, it.dock, L)
   if (s >= 0 && s <= dur) return { ...d, phase: 'dock', p: s / dur }
   // 進場:沿道路開到碼頭前,再倒車靠碼頭;離場:開出到道路後駛離
@@ -178,11 +221,15 @@ export function phaseLabel(it: HubTrip, pose: Pose | null): string {
   if (!pose) return '不在場'
   if (pose.phase === 'approach') return '進場中'
   if (pose.phase === 'leave') return '離場中'
-  if (it.dock < 0) return '臨時車位等候'
+  if (pose.phase === 'queue') return '臨時車位排隊'
   return it.dir === 'out' ? '裝貨中' : '卸貨中'
 }
 
 export function dockLabel(it: HubTrip): string {
-  if (it.dock < 0) return '臨時車位'
   return (it.dir === 'out' ? '發車 O' : '進站 I') + (it.dock + 1)
+}
+
+// 等碼頭的分鐘數(含不進臨時車位、只是晚一點進場的)
+export function waitMin(it: HubTrip): number {
+  return Math.round(it.d0 - (it.dir === 'out' ? it.ev - LOAD_MIN : it.ev))
 }

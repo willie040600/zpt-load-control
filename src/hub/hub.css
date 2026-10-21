@@ -164,6 +164,12 @@
 }
 .hx-track { flex: 1; min-width: 80px; display: flex; flex-direction: column; gap: 3px; padding-top: 4px; container-type: inline-size; }
 .hx-track input[type='range'] { width: 100%; margin: 0; accent-color: var(--hx-amber); }
+/* 裝載率直方圖:與刻度同樣左右內縮,對齊時間 */
+.hx-hist { display: flex; align-items: flex-end; gap: 1px; height: 22px; margin: 0 8px -2px; }
+.hx-hbar { flex: 1; height: 100%; display: flex; flex-direction: column-reverse; cursor: pointer; }
+.hx-hbar span { opacity: 0.75; }
+.hx-hbar span:last-child { border-radius: 2px 2px 0 0; }
+.hx-hbar:hover span { opacity: 1; }
 /* 刻度左右各留半個滑桿圓鈕寬,對齊圓鈕中心的移動範圍 */
 .hx-ticks { position: relative; height: 18px; margin: 0 8px; }
 .hx-ticks span { position: absolute; top: 0; width: 1px; height: 4px; background: #cfcac0; }

@@ -8,7 +8,7 @@ import { computeKpis } from '../lib/kpi'
 import { fmtMoney, fmtTime } from '../lib/selectors'
 import { useStore } from '../store'
 import { HubScene } from './HubScene'
-import { HUBS, HUB_ORDER, dockLabel, hubOf, phaseLabel, poseAt, type HubTrip } from './layout'
+import { HUBS, HUB_ORDER, dockLabel, hubOf, phaseLabel, poseAt, waitMin, type HubTrip } from './layout'
 import { jumpToBusiest, useHubDay } from './useHub'
 import './hub.css'
 
@@ -267,6 +267,7 @@ function TripPanel({ id }: { id: string }) {
           <div className="hx-chips">
             <span className="hx-chip dark"><i style={{ background: LEVEL_COLOR[lvl] }} />{it ? phaseLabel(it, pose) : t.removed ? '已併入同組' : '不在本中心'}</span>
             {it && <span className="hx-chip">{dockLabel(it)}</span>}
+            {it && waitMin(it) > 0 && <span className="hx-chip">等碼頭 {waitMin(it)} 分</span>}
           </div>
         </div>
       </div>
@@ -393,6 +394,36 @@ function RightPanel() {
   )
 }
 
+// 進度條上方的裝載率直方圖:每 30 分鐘一格,依本中心發車或抵達時刻統計,顏色同卡車
+const HIST_BINS = 48
+const HIST_ORDER = ['good', 'watch', 'bad', 'empty'] as const
+const HIST_LABEL = { good: '≥90%', watch: '80–90%', bad: '<80%', empty: '空車' } as const
+
+function LoadHist() {
+  const { items } = useHubDay()
+  const setTime = useStore((s) => s.setTime)
+  const { bins, max } = useMemo(() => {
+    const bins = Array.from({ length: HIST_BINS }, () => ({ good: 0, watch: 0, bad: 0, empty: 0 }))
+    for (const it of items) bins[Math.min(HIST_BINS - 1, Math.max(0, Math.floor(it.ev / 30)))][truckLevel(it.t)]++
+    const total = (b: (typeof bins)[number]) => b.good + b.watch + b.bad + b.empty
+    return { bins, max: Math.max(1, ...bins.map(total)) }
+  }, [items])
+  return (
+    <div className="hx-hist">
+      {bins.map((b, i) => {
+        const n = b.good + b.watch + b.bad + b.empty
+        const detail = HIST_ORDER.filter((k) => b[k] > 0).map((k) => `${HIST_LABEL[k]} ${b[k]}`).join('、')
+        return (
+          <div key={i} className="hx-hbar" onClick={() => setTime(i * 30)}
+            title={`${fmtTime(i * 30)}–${fmtTime(i * 30 + 30)} 進出 ${n} 趟${detail ? `:${detail}` : ''}`}>
+            {HIST_ORDER.map((k) => b[k] > 0 && <span key={k} style={{ height: `${(b[k] / max) * 100}%`, background: LEVEL_COLOR[k] }} />)}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function Toolbar() {
   const s = useStore()
   return (
@@ -406,6 +437,7 @@ function Toolbar() {
         ))}
       </div>
       <div className="hx-track">
+        <LoadHist />
         <input type="range" min={0} max={1439} value={Math.floor(s.time)} onChange={(e) => s.setTime(Number(e.target.value))} aria-label="時間" />
         {/* 時間刻度:每小時一格,每 3 小時標數字 */}
         <div className="hx-ticks" aria-hidden="true">

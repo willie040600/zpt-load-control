@@ -237,7 +237,6 @@ function Cages({ items, hub }: { items: HubTrip[]; hub: HubLayout }) {
     const time = useStore.getState().time
     let k = 0
     for (const it of items) {
-      if (it.dock < 0) continue
       const ps = poseAt(it, hub, time)
       if (!ps || ps.phase !== 'dock') continue
       const n = Math.min(it.t.eN, it.t.eCap)
@@ -283,8 +282,8 @@ function Truck({ it, hub }: { it: HubTrip; hub: HubLayout }) {
   const t = it.t
   const L = truckLength(t.eTn)
   const dim = groupFilter !== null && groupOf(t) !== groupFilter
-  // 車上沒貨的時段顯示灰色:發車車輛進場等裝貨、進站車輛卸完離場
-  const bare = (it.dir === 'out' && phase === 'approach') || (it.dir === 'in' && phase === 'leave')
+  // 車上沒貨的時段顯示灰色:發車車輛進場、排隊等裝貨,進站車輛卸完離場
+  const bare = (it.dir === 'out' && (phase === 'approach' || phase === 'queue')) || (it.dir === 'in' && phase === 'leave')
   const stripe = dim ? DIM : STRIPE[bare ? 'empty' : truckLevel(t)]
   const trailer = L - 2.4
   const docked = phase === 'dock'
