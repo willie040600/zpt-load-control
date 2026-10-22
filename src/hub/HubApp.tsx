@@ -58,6 +58,7 @@ function TopBar() {
         </div>
       </div>
       <div className="hx-tabs">
+        <button onClick={() => s.setView('compare')}>演算法比較</button>
         {HUB_ORDER.map((h) => (
           <button key={h} className={s.hub === h ? 'on' : ''} onClick={() => { s.setHub(h); jumpToBusiest(s.date, h) }}>{h}</button>
         ))}

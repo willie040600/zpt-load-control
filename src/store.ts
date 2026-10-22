@@ -3,7 +3,7 @@ import type { BucketCode, HubName, Mode, Region, TripType } from './data/types'
 
 export type Selection = { kind: 'trip'; id: string } | { kind: 'node'; name: string } | null
 export type Scope = 'day' | 'all'
-export type View = 'hub' | 'network'
+export type View = 'hub' | 'network' | 'compare'
 export type TonKey = '17' | '18.5' | '35'
 
 export interface FocusGoal {
@@ -62,7 +62,7 @@ interface State {
 }
 
 export const useStore = create<State>((set) => ({
-  view: 'hub',
+  view: new URLSearchParams(window.location.search).get('view') === 'compare' ? 'compare' : 'hub',
   hub: '北轉',
   adopted: {},
   showLabels: false,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Html, Line, MapControls } from '@react-three/drei'
 import * as THREE from 'three'
@@ -8,7 +8,7 @@ import { isEmptyRun, truckLevel } from '../lib/effective'
 import { Ticker } from '../scene/Trucks'
 import { useStore } from '../store'
 import { DOCK, HUBS, ROAD_GAP, poseAt, truckLength, type HubLayout, type HubTrip, type Phase } from './layout'
-import { useHubDay } from './useHub'
+import { useHubDay, type HubDay } from './useHub'
 
 const STRIPE = { good: '#2fa866', watch: '#e8a317', bad: '#e0483e', empty: '#7d858f' } as const
 const DIM = '#b9bec4'
@@ -443,10 +443,11 @@ function CameraRig({ hub }: { hub: HubLayout }) {
   )
 }
 
-function Scene() {
+function Scene({ data, tick = true }: { data?: HubDay; tick?: boolean }) {
   const hubName = useStore((s) => s.hub)
   const hub = HUBS[hubName]
-  const { items } = useHubDay()
+  const defaultData = useHubDay()
+  const { items } = data ?? defaultData
   return (
     <>
       <color attach="background" args={['#ece9e2']} />
@@ -467,18 +468,18 @@ function Scene() {
       <Building hub={hub} />
       <Cages items={items} hub={hub} />
       <Trucks items={items} hub={hub} />
-      <Ticker />
+      {tick && <Ticker />}
       <CameraRig hub={hub} />
     </>
   )
 }
 
-export function HubScene() {
+export const HubScene = memo(function HubScene({ data, tick = true }: { data?: HubDay; tick?: boolean }) {
   const select = useStore((s) => s.select)
   return (
     <Canvas shadows orthographic dpr={[1, 2]} camera={{ position: [260, 300, 300], zoom: 4, near: -1000, far: 3000 }}
       onPointerMissed={() => select(null)}>
-      <Scene />
+      <Scene data={data} tick={tick} />
     </Canvas>
   )
-}
+})

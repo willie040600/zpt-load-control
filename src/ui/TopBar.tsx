@@ -47,6 +47,7 @@ export function TopBar() {
           </div>
         </div>
         <div className="controls">
+          <button className="back-hub" onClick={() => s.setView('compare')}>演算法比較</button>
           <button className="back-hub" onClick={() => s.setView('hub')}>← 轉運中心視角</button>
           <div className="seg">
             {(Object.keys(REGION_VIEW) as Region[]).map((r) => (
