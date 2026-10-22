@@ -272,6 +272,11 @@ function shortName(name: string): string {
   return name.replace('(外島空運件)', '').replace('物流', '')
 }
 
+// 車上沒貨的時段:發車車輛進場、排隊等裝貨,進站車輛卸完離場
+function isBare(it: HubTrip, phase: Phase | null): boolean {
+  return (it.dir === 'out' && (phase === 'approach' || phase === 'queue')) || (it.dir === 'in' && phase === 'leave')
+}
+
 function Truck({ it, hub }: { it: HubTrip; hub: HubLayout }) {
   const g = useRef<THREE.Group>(null)
   const select = useStore((s) => s.select)
@@ -282,8 +287,8 @@ function Truck({ it, hub }: { it: HubTrip; hub: HubLayout }) {
   const t = it.t
   const L = truckLength(t.eTn)
   const dim = groupFilter !== null && groupOf(t) !== groupFilter
-  // 車上沒貨的時段顯示灰色:發車車輛進場、排隊等裝貨,進站車輛卸完離場
-  const bare = (it.dir === 'out' && (phase === 'approach' || phase === 'queue')) || (it.dir === 'in' && phase === 'leave')
+  // 車上沒貨的時段顯示灰色
+  const bare = isBare(it, phase)
   const stripe = dim ? DIM : STRIPE[bare ? 'empty' : truckLevel(t)]
   const trailer = L - 2.4
   const docked = phase === 'dock'
@@ -356,9 +361,18 @@ function Truck({ it, hub }: { it: HubTrip; hub: HubLayout }) {
 function Trucks({ items, hub }: { items: HubTrip[]; hub: HubLayout }) {
   const [visible, setVisible] = useState<HubTrip[]>([])
   const key = useRef('')
+  // 車趟資料(碼頭位置、篩選)改變時,即使在場的車一樣也要換成新的資料
+  useEffect(() => { key.current = '' }, [items])
   useFrame(() => {
-    const time = useStore.getState().time
-    const vis = items.filter((it) => poseAt(it, hub, time) !== null)
+    const { time, onlyLow, selected } = useStore.getState()
+    const selectedId = selected?.kind === 'trip' ? selected.id : null
+    const vis = items.filter((it) => {
+      const ps = poseAt(it, hub, time)
+      if (!ps) return false
+      // 「只看 <80%」只留載著貨的低裝載車:整趟空車,以及還沒裝貨、已卸空的灰色車都不算(選取中的車例外)
+      if (onlyLow && it.t.id !== selectedId && (isEmptyRun(it.t) || isBare(it, ps.phase))) return false
+      return true
+    })
     const k = vis.map((v) => v.t.id).join(',')
     if (k !== key.current) {
       key.current = k
