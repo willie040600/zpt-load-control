@@ -16,7 +16,7 @@ export function Timeline() {
   const { bins, max } = useMemo(() => {
     const bins = Array.from({ length: BINS }, () => ({ ok: 0, low: 0 }))
     for (const t of trips) {
-      if (t.removed) continue
+      if (t.removed || t.carry) continue
       const b = bins[Math.floor(t.h / 30) % BINS]
       if (t.eLr < 80) b.low++
       else b.ok++

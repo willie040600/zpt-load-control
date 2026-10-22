@@ -72,6 +72,7 @@ export interface EffTrip extends RawTrip {
   eN: number
   eLr: number
   eC: number
+  carry?: boolean // 前一天發車、跨午夜後仍在路上的車趟(全台視角用)
 }
 
 export type Mode = 'current' | 'recommended'

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { BUCKETS, DEFAULT_REASON, GROUP_COLOR, REASON_CODES, TYPE_LABEL, suggestion } from '../data/codes'
-import { TRIPS_BY_DATE, TRIP_BY_ID, WEEKDAY, weekdayOf } from '../data/load'
+import { TRIPS_BY_DATE, TRIPS_BY_GID, TRIP_BY_ID, WEEKDAY, weekdayOf } from '../data/load'
 import { NODES } from '../data/nodes'
 import type { EffTrip, RawTrip } from '../data/types'
 import { effective, emptyCost, loadLevel } from '../lib/effective'
@@ -37,7 +37,7 @@ function TripDetail({ id }: { id: string }) {
   const cur = effective(raw, 'current', false)
   const rec = effective(raw, 'recommended', true)
   const showAfter = s.mode === 'recommended' && (raw.tier === 'v' || (raw.tier === 'w' && s.includeWindow))
-  const group = raw.gid ? (TRIPS_BY_DATE.get(raw.d) ?? []).filter((t) => t.gid === raw.gid && t.id !== raw.id) : []
+  const group = raw.gid ? (TRIPS_BY_GID.get(raw.gid) ?? []).filter((t) => t.id !== raw.id) : []
   const reason = s.reasons[raw.id]
   const low = raw.lr < 80
 
@@ -192,7 +192,7 @@ function NodeDetail({ name }: { name: string }) {
         <div className="block-title">當日低裝載車趟</div>
         {dayLows.length === 0 && <div className="muted small">當日沒有低裝載車趟</div>}
         {dayLows.map((t) => (
-          <button key={t.id} className="trip-row compact" onClick={() => { s.select({ kind: 'trip', id: t.id }); s.setTime(t.h + t.du / 2) }}>
+          <button key={t.id} className="trip-row compact" onClick={() => { s.select({ kind: 'trip', id: t.id }); s.setTime(Math.min(1439, t.h + t.du / 2)) }}>
             <span className={'lr ' + loadLevel(t.lr)}>{Math.round(t.lr)}%</span>
             <span className="trip-route">{t.o} → {t.x}</span>
             <span className="muted">{t.tn}噸 {fmtTime(t.h)}</span>

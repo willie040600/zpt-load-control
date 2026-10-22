@@ -11,6 +11,8 @@
 ## 資料
 - 來源:115 年 6 月、7 月(1–20 日)車趟派遣原始數據,共 9,748 趟(以派車單號去重)。
 - `src/data/trips.json`:每趟車的裝載率、費用、歸因代碼與建議動作。不含司機姓名與車牌。
+- 日期是**實際出發的日曆日期**,不是原始資料的「作業日期」(繼送常在作業日的隔天凌晨出發,約 47% 的車趟兩者不同)。轉運中心視角的時間軸是連續的:會一併顯示前後一天跨午夜的進出,碼頭占用也接得起來。
+- `src/data/meta.json`:資料不完整的日期(例如 7/11 整天沒有資料、6/1 缺前一天的凌晨繼送),下拉選單會標示。
 - 空載成本 = 車次費用 ×(1 − 裝載率),只計裝載率 <80% 的車趟。可省金額依同路線中位價估算,非正式會計口徑。
 - 站所座標依運費表地址推估,僅供示意;金門為了畫面集中往東移。
 
@@ -26,7 +28,7 @@
 ## 更新資料(analysis/)
 從原始 Excel 重新產生 `src/data/trips.json`:
 1. 把 6 月、7 月的「車趟派遣SOP原始數據.xlsx」放到 `analysis/data/jun.xlsx`、`analysis/data/jul.xlsx`。
-2. 執行 `sh analysis/run_all.sh`(需要 Python 3、pandas、openpyxl)。
+2. 執行 `sh analysis/run_all.sh`(需要 Python 3、pandas、openpyxl)。腳本會印出並寫出中文,Windows 上已在腳本內強制使用 UTF-8。
 3. 再執行 `npm run build`。
 
 各腳本:`prepare.py` 轉檔 → `step0.py` 低裝載歸因 → `mismatch.py` 車型錯配分級 → `export.py` 產生建議動作與 JSON。

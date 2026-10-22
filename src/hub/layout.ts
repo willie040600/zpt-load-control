@@ -40,6 +40,8 @@ const MOVE_MIN = 6 // 進出場行駛時間
 
 export type Dir = 'in' | 'out'
 
+// 時間都是相對於檢視日 00:00 的分鐘數,可以小於 0(前一天)或大於 1440(隔天),
+// 這樣跨午夜的進出與碼頭占用才接得起來
 export interface HubTrip {
   t: EffTrip
   dir: Dir
@@ -51,6 +53,16 @@ export interface HubTrip {
   d1: number // 離開碼頭
 }
 
+// 車趟與它的日期相對於檢視日的分鐘偏移(前一天 −1440、當天 0、隔天 +1440)
+export interface HubEntry {
+  t: EffTrip
+  off: number
+}
+
+// 檢視日前後多遠的車趟還會影響當天:前一天的排隊可能延到當天,隔天凌晨的裝貨從前一晚開始
+const LOOK_BACK = 600
+const LOOK_AHEAD = 60
+
 export function directionOf(t: EffTrip, hub: HubLayout): Dir | null {
   if (t.o === hub.name) return 'out'
   if (t.x === hub.name) return 'in'
@@ -59,17 +71,23 @@ export function directionOf(t: EffTrip, hub: HubLayout): Dir | null {
 
 // 依時間順序把車趟分到碼頭;碼頭全滿時先到臨時車位排隊,最早空出的碼頭一空就開進去,
 // 裝卸時間不變、整段往後延。等待不超過一段進場行駛時間的,直接晚一點進場,不進臨時車位
-export function schedule(trips: EffTrip[], hub: HubLayout): HubTrip[] {
+export function schedule(entries: HubEntry[], hub: HubLayout): HubTrip[] {
   const items: HubTrip[] = []
-  for (const t of trips) {
+  for (const { t, off } of entries) {
     if (t.removed) continue
     const dir = directionOf(t, hub)
     if (!dir) continue
-    if (dir === 'out') items.push({ t, dir, dock: -1, yard: -1, ev: t.h, q0: t.h - LOAD_MIN, d0: t.h - LOAD_MIN, d1: t.h })
-    else {
-      const arr = (t.h + t.du) % 1440
-      items.push({ t, dir, dock: -1, yard: -1, ev: arr, q0: arr, d0: arr, d1: arr + UNLOAD_MIN })
+    let it: HubTrip
+    if (dir === 'out') {
+      const ev = off + t.h
+      it = { t, dir, dock: -1, yard: -1, ev, q0: ev - LOAD_MIN, d0: ev - LOAD_MIN, d1: ev }
+    } else {
+      const arr = off + t.h + t.du
+      it = { t, dir, dock: -1, yard: -1, ev: arr, q0: arr, d0: arr, d1: arr + UNLOAD_MIN }
     }
+    // 離檢視日太遠、碰不到當天的車趟不用排
+    if (it.d1 < -LOOK_BACK || it.d0 > 1440 + LOOK_AHEAD) continue
+    items.push(it)
   }
   items.sort((a, b) => a.d0 - b.d0)
   // 各碼頭可以開始進場的時刻(上一台離開碼頭再駛離之後)
@@ -97,13 +115,19 @@ export function schedule(trips: EffTrip[], hub: HubLayout): HubTrip[] {
     it.dock = i
     docks[i] = it.d1 + MOVE_MIN
   }
-  return items
+  // 只留下和當天 00:00–24:00 有重疊的(含進出場行駛時間)
+  return items.filter((it) => it.q0 - MOVE_MIN < 1440 && it.d1 + MOVE_MIN > 0)
 }
 
-// 一天中碼頭最忙的時刻,切換轉運中心時用來決定預設時間
+// 資料上的發車或抵達落在檢視日當天的車趟
+export function inDay(it: HubTrip): boolean {
+  return it.ev >= 0 && it.ev < 1440
+}
+
+// 一天中碼頭最忙的時刻,切換轉運中心或日期時用來決定預設時間
 export function busiestMinute(items: HubTrip[]): number {
   const occ = new Array(1440).fill(0)
-  for (const it of items) for (let m = it.d0; m < it.d1; m++) occ[((m % 1440) + 1440) % 1440]++
+  for (const it of items) for (let m = Math.max(0, Math.floor(it.d0)); m < Math.min(1440, it.d1); m++) occ[m]++
   let best = 0
   for (let m = 1; m < 1440; m++) if (occ[m] > occ[best]) best = m
   return best
@@ -123,14 +147,6 @@ export interface Pose {
   yaw: number
   phase: Phase
   p: number // 靠碼頭期間的進度 0–1
-}
-
-// 把時間差換算到 (−720, 720] 之間,處理跨午夜
-function rel(time: number, at: number): number {
-  let d = time - at
-  while (d > 720) d -= 1440
-  while (d <= -720) d += 1440
-  return d
 }
 
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k
@@ -187,7 +203,7 @@ function queuePose(it: HubTrip, hub: HubLayout, s: number, L: number): Pose | nu
 
 export function poseAt(it: HubTrip, hub: HubLayout, time: number): Pose | null {
   // 以抵達(排隊或靠碼頭)時刻為基準的相對時間
-  const s0 = rel(time, it.q0)
+  const s0 = time - it.q0
   const wait = it.d0 - it.q0
   const s = s0 - wait
   const dur = it.d1 - it.d0

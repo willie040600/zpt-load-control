@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { DATES, WEEKDAY, weekdayOf } from '../data/load'
+import { DATES, dateLabel } from '../data/load'
 import { REGION_VIEW } from '../data/nodes'
 import type { Region } from '../data/types'
 import { computeKpis } from '../lib/kpi'
@@ -57,7 +57,7 @@ export function TopBar() {
           </div>
           <select value={s.date} onChange={(e) => s.setDate(e.target.value)}>
             {DATES.map((d) => (
-              <option key={d} value={d}>{d.slice(5).replace('-', '/')}(週{WEEKDAY[weekdayOf(d)]})</option>
+              <option key={d} value={d}>{dateLabel(d)}</option>
             ))}
           </select>
           <div className="seg">

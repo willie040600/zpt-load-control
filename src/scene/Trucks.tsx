@@ -26,7 +26,7 @@ function truckLength(tn: number): number {
 
 // 計算車趟在指定時間的位置與朝向;不在路上回傳 null
 function pose(t: EffTrip, time: number) {
-  const p = progressAt(t.h, t.du, time)
+  const p = progressAt(t.h, t.du, time, t.carry)
   if (p < 0) return null
   const c = routeCurve(t.o, t.x)
   const [x, z] = pointAt(c, p)

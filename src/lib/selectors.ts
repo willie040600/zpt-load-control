@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { NODES } from '../data/nodes'
-import { TRIPS, TRIPS_BY_DATE } from '../data/load'
+import { TRIPS, TRIPS_BY_DATE, addDays } from '../data/load'
 import type { EffTrip, RawTrip, Region } from '../data/types'
 import { useStore, type TonKey } from '../store'
 import { effective } from './effective'
@@ -38,14 +38,16 @@ export function useScopeBaseline(): EffTrip[] {
   }, [date, scope, region, types, tons])
 }
 
-// 3D 場景用:當日車趟,不受區域限制
+// 3D 場景用:當日車趟,不受區域限制;另含前一天發車、跨午夜後仍在路上的車趟
 export function useSceneTrips(): EffTrip[] {
   const { date, types, tons, onlyLow, mode, includeWindow } = useStore()
   return useMemo(() => {
-    const src = TRIPS_BY_DATE.get(date) ?? []
-    return src
-      .filter((t) => types[t.ty] && tons[tonKey(t.tn)] && (!onlyLow || t.lr < 80))
-      .map((t) => effective(t, mode, includeWindow))
+    const keep = (t: RawTrip) => types[t.ty] && tons[tonKey(t.tn)] && (!onlyLow || t.lr < 80)
+    const today = (TRIPS_BY_DATE.get(date) ?? []).filter(keep).map((t) => effective(t, mode, includeWindow))
+    const carry = (TRIPS_BY_DATE.get(addDays(date, -1)) ?? [])
+      .filter((t) => t.h + t.du > 1440 && keep(t))
+      .map((t) => ({ ...effective(t, mode, includeWindow), carry: true }))
+    return [...today, ...carry]
   }, [date, types, tons, onlyLow, mode, includeWindow])
 }
 

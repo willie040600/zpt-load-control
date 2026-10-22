@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { BUCKETS, DEFAULT_REASON, GROUP_COLOR, GROUP_LABEL, REASON_CODES, TYPE_LABEL, suggestion, type BucketGroup } from '../data/codes'
-import { DATES, TRIPS_BY_DATE, TRIP_BY_ID, WEEKDAY, weekdayOf } from '../data/load'
+import { DATES, TRIPS_BY_DATE, TRIPS_BY_GID, TRIP_BY_ID, dateLabel } from '../data/load'
 import { TAIWAN_OUTLINE } from '../data/nodes'
 import type { EffTrip, HubName, TripType } from '../data/types'
 import { adoptKey, effective, emptyCost, isEmptyRun, truckLevel } from '../lib/effective'
@@ -40,11 +40,11 @@ function Delta({ now, base, unit = '', better = 'up', money = false }: {
 
 function TopBar() {
   const s = useStore()
-  const { all, base, items } = useHubDay()
+  const { all, base, dayItems } = useHubDay()
   const k = useMemo(() => computeKpis(all), [all])
   const b = useMemo(() => computeKpis(base), [base])
-  const nIn = items.filter((i) => i.dir === 'in').length
-  const nOut = items.filter((i) => i.dir === 'out').length
+  const nIn = dayItems.filter((i) => i.dir === 'in').length
+  const nOut = dayItems.filter((i) => i.dir === 'out').length
   const saved = b.cost - k.cost
   return (
     <header className="hx-top">
@@ -93,7 +93,7 @@ function TopBar() {
         <div className="hx-time">{fmtTime(s.time)}</div>
         <select value={s.date} onChange={(e) => { s.setDate(e.target.value); jumpToBusiest(e.target.value, s.hub) }} aria-label="作業日期">
           {DATES.map((d) => (
-            <option key={d} value={d}>{d.slice(5).replace('-', '/')}(週{WEEKDAY[weekdayOf(d)]})</option>
+            <option key={d} value={d}>{dateLabel(d)}</option>
           ))}
         </select>
       </div>
@@ -105,9 +105,10 @@ function focusTrip(it: HubTrip) {
   const s = useStore.getState()
   const hub = HUBS[s.hub]
   s.select({ kind: 'trip', id: it.t.id })
-  const mid = (it.d0 + it.d1) / 2
+  // 跨午夜的車趟只取落在當天的那一段
+  const mid = Math.min(1439, Math.max(0, (it.d0 + it.d1) / 2))
   s.setTime(mid)
-  const ps = poseAt(it, hub, ((mid % 1440) + 1440) % 1440)
+  const ps = poseAt(it, hub, mid)
   if (ps) s.focusOn(ps.x, ps.z, 0)
 }
 
@@ -116,12 +117,8 @@ function Events() {
   const time = useStore((s) => Math.floor(s.time))
   const list = useMemo(() => {
     return items
-      .map((it) => {
-        let ago = time - it.ev
-        if (ago < 0) ago += 1440
-        return { it, ago }
-      })
-      .filter((e) => e.ago <= 240)
+      .map((it) => ({ it, ago: time - it.ev }))
+      .filter((e) => e.ago >= 0 && e.ago <= 240)
       .sort((a, b) => a.ago - b.ago)
       .slice(0, 5)
   }, [items, time])
@@ -253,10 +250,10 @@ function TripPanel({ id }: { id: string }) {
   const lvl = truckLevel(t)
   const key = adoptKey(raw)
   const adopted = !!s.adopted[key]
-  const group = raw.gid ? (TRIPS_BY_DATE.get(raw.d) ?? []).filter((x) => x.gid === raw.gid && x.id !== raw.id) : []
+  const group = raw.gid ? (TRIPS_BY_GID.get(raw.gid) ?? []).filter((x) => x.id !== raw.id) : []
   const reason = s.reasons[raw.id]
   const regions = raw.rg ? Object.entries(raw.rg) as [string, number][] : []
-  const arrive = (raw.h + raw.du) % 1440
+  const arrive = raw.h + raw.du
   return (
     <div className="hx-detail">
       <div className="hx-detail-head">
@@ -279,7 +276,7 @@ function TripPanel({ id }: { id: string }) {
 
       <div className="hx-stats">
         <div><span>發車</span><b>{fmtTime(raw.h)}</b></div>
-        <div><span>抵達</span><b>{fmtTime(arrive)}</b></div>
+        <div><span>抵達</span><b>{fmtTime(arrive)}{arrive >= 1440 && <small>(次日)</small>}</b></div>
         <div><span>任務時長</span><b>{(raw.du / 60).toFixed(1)} 時</b></div>
         <div><span>車次費用</span><b>{t.eC.toLocaleString('zh-TW')}</b></div>
         <div><span>空載(估)</span><b>{Math.round(emptyCost(t)).toLocaleString('zh-TW')}</b></div>
@@ -338,8 +335,8 @@ function TripPanel({ id }: { id: string }) {
 
 function HubSummary() {
   const s = useStore()
-  const { all, items } = useHubDay()
-  const lows = useMemo(() => items.filter((i) => i.t.eLr < 80).sort((a, b) => emptyCost(b.t) - emptyCost(a.t)).slice(0, 6), [items])
+  const { all, dayItems } = useHubDay()
+  const lows = useMemo(() => dayItems.filter((i) => i.t.eLr < 80).sort((a, b) => emptyCost(b.t) - emptyCost(a.t)).slice(0, 6), [dayItems])
   const verified = useMemo(() => {
     const keys = new Set<string>()
     let sv = 0
@@ -347,12 +344,12 @@ function HubSummary() {
     return { keys: [...keys], sv }
   }, [all])
   const anyAdopted = Object.keys(s.adopted).length > 0
-  const others = items.filter((i) => hubOf(i.t) !== s.hub).length
+  const others = dayItems.filter((i) => hubOf(i.t) !== s.hub).length
   return (
     <div className="hx-detail">
       <div className="hx-detail-title">{s.hub} 今日概況</div>
       <div className="hx-detail-sub">{HUBS[s.hub].title}・點選卡車看細節與建議</div>
-      {others > 0 && <div className="hx-note">畫面顯示實際進出的 {items.length} 趟,其中 {others} 趟由其他中心結帳,不計入上方 KPI</div>}
+      {others > 0 && <div className="hx-note">畫面顯示實際進出的 {dayItems.length} 趟,其中 {others} 趟由其他中心結帳,不計入上方 KPI</div>}
       <div className="hx-adopt">
         <div>
           <b>已驗證建議 {verified.keys.length} 項</b>

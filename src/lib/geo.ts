@@ -43,10 +43,10 @@ export function tangentAt(c: Curve, t: number): [number, number] {
   return [2 * u * (c.cx - c.ax) + 2 * t * (c.bx - c.cx), 2 * u * (c.cz - c.az) + 2 * t * (c.bz - c.cz)]
 }
 
-// 依時間算行駛進度(0–1);不在路上回傳 -1。跨午夜的車趟會接到隔天凌晨
-export function progressAt(h: number, du: number, time: number): number {
-  let dt = time - h
-  if (dt < 0 && h + du > 1440) dt += 1440
+// 依時間算行駛進度(0–1);不在路上回傳 -1。
+// carry 是前一天發車、跨午夜後仍在路上的車趟:發車時刻 h 屬於前一天
+export function progressAt(h: number, du: number, time: number, carry = false): number {
+  const dt = time - (carry ? h - 1440 : h)
   if (dt < 0 || dt > du) return -1
   return dt / du
 }

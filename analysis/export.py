@@ -106,7 +106,9 @@ rows=[]
 for i,r in t.iterrows():
     h=mins(r['出發']); du=max(20,int((r['結束']-r['出發']).total_seconds()/60)) if pd.notna(r['結束']) else 120
     du=min(du,600)
-    o=dict(id=str(r['派車單號']),d=r['日期'].strftime('%Y-%m-%d'),ty=TY[r['類型']],o=r['發車'],x=r['到著'],tn=float(r['噸']),cap=int(r['cap']),
+    # d 用實際出發的日曆日期(不是作業日期):繼送常在作業日的隔天凌晨出發,
+    # 若用作業日期,畫面會把這些車放到出發前一天的同一時刻
+    o=dict(id=str(r['派車單號']),d=r['出發'].strftime('%Y-%m-%d'),ty=TY[r['類型']],o=r['發車'],x=r['到著'],tn=float(r['噸']),cap=int(r['cap']),
            n=int(r['總籠']),lr=round(float(r['裝載率']),1),c=int(r['費用']),h=h,du=du,bk=r['bk'],emp=round(float(r['空載'])),cr=r['承運'])
     if r['溫層']=='低溫車': o['cold']=1
     if r['補']>0 or r['收']>0: o['ec']=int(r['補']+r['收'])
@@ -120,6 +122,14 @@ for i,r in t.iterrows():
     rg={k[3:]:int(v) for k,v in rs.items() if v>0}
     if rg: o['rg']=rg
     rows.append(o)
-json.dump(rows,open('out/trips.json','w'),ensure_ascii=False,separators=(',',':'))
+json.dump(rows,open('out/trips.json','w',encoding='utf-8'),ensure_ascii=False,separators=(',',':'))
 print(len(rows)); import os; print(os.path.getsize('out/trips.json'))
+# 資料不完整的日曆日:一個日曆日要完整,需要「當天的作業日」(白天到夜間的車)
+# 與「前一天的作業日」(隔天凌晨出發的繼送)兩份資料都在
+biz={d.date() for d in t['日期']}
+cal=sorted({r['d'] for r in rows})
+one=pd.Timedelta(days=1)
+partial=[d for d in cal if pd.Timestamp(d).date() not in biz or (pd.Timestamp(d)-one).date() not in biz]
+json.dump({'partialDates':partial},open('out/meta.json','w',encoding='utf-8'),ensure_ascii=False)
+print('資料不完整的日期',partial)
 print(t.bk.value_counts())

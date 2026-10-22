@@ -120,7 +120,8 @@ function TopLowTrips() {
           className="trip-row"
           onClick={() => {
             select({ kind: 'trip', id: t.id })
-            setTime(t.h + t.du * 0.5)
+            // 前一天發車的車趟取落在當天的那一段;當天發車的最晚到 23:59
+            setTime(Math.min(1439, Math.max(0, (t.carry ? t.h - 1440 : t.h) + t.du * 0.5)))
             const [x, z] = pointAt(routeCurve(t.o, t.x), 0.5)
             const [ax, az] = nodeXZ(t.o)
             const [bx, bz] = nodeXZ(t.x)
