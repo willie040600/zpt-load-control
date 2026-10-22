@@ -1,4 +1,5 @@
 import pandas as pd,numpy as np,itertools
+from pricing import price_tables,route_price
 pd.set_option('display.width',250); pd.set_option('display.max_columns',40)
 frames=[]
 for n in ['jun','jul']:
@@ -34,13 +35,9 @@ asg(t['發車'].isin(REMOTE)|t['到著'].isin(REMOTE),'1B 偏遠/外島/港口�
 asg((t['補']>0)|(t['收']>0),'1C 補空/收空調度')
 # price table: median cost by route+tonnage class
 t['級']=np.where(t['噸']>=25,'35','17')
-price=t.groupby(['類型','發車','到著','級'])['費用'].median()
-pricetype=t[t.費用>0].groupby(['類型','級'])['費用'].median()
+price,pricetype=price_tables(t)   # 排除 0 元車趟,見 pricing.py
 def pr(typ,a,b,k):
-    v=price.get((typ,a,b,k),np.nan)
-    if np.isnan(v) or v==0:
-        v=np.nan
-    return v
+    return route_price(price,typ,a,b,k)
 # S2 oversized vehicle: 35T carrying <=14
 m=(t['級']=='35')&(t['總籠']<=14)&low&(t['bucket']=='')
 sav=[]

@@ -8,7 +8,8 @@ r = t.groupby(['類型', '發車', '到著']).apply(lambda d: pd.Series({
     'n35小': ((d.級 == '35') & (d.總籠 <= 14)).sum(),
     '35中位籠': d.loc[d.級 == '35', '總籠'].median(),
     '17中位籠': d.loc[d.級 == '17', '總籠'].median(),
-    '35價': d.loc[d.級 == '35', '費用'].median(), '17價': d.loc[d.級 == '17', '費用'].median(),
+    # 價格只看有收費的車趟:0 元車趟不是價格,見 pricing.py
+    '35價': d.loc[(d.級 == '35') & (d.費用 > 0), '費用'].median(), '17價': d.loc[(d.級 == '17') & (d.費用 > 0), '費用'].median(),
     '17最大籠': d.loc[d.級 == '17', '總籠'].max()}), include_groups=False).reset_index()
 m = m.merge(r, on=['類型', '發車', '到著'], how='left')
 

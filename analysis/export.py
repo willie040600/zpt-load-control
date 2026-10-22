@@ -1,4 +1,5 @@
 import pandas as pd,numpy as np,json,glob
+from pricing import price_tables,route_price
 t=pd.read_pickle('out/trips.pkl')
 m=pd.read_pickle('out/mismatch.pkl')
 raw=pd.concat([pd.read_pickle(f) for f in glob.glob('data/*明細.pkl')])
@@ -31,11 +32,10 @@ t['act']='';t['tier']='';t['nTn']=np.nan;t['nCap']=np.nan;t['nN']=np.nan;t['nC']
 for i,r in t[t.bk=='2A1'].iterrows():
     _,sv,p17=g2[r['派車單號']]
     t.loc[i,['act','tier','nTn','nCap','nN','nC']]=['sw','v',17,14,r['總籠'],p17]
-price=t.groupby(['類型','發車','到著','級'])['費用'].median()
-pricetype=t[t.費用>0].groupby(['類型','級'])['費用'].median()
+price,pricetype=price_tables(t)   # 排除 0 元車趟,見 pricing.py
 def pr(typ,a,b,k):
-    v=price.get((typ,a,b,k),np.nan)
-    if np.isnan(v) or v==0: v=pricetype.get((typ,k),np.nan)
+    v=route_price(price,typ,a,b,k)
+    if np.isnan(v): v=pricetype.get((typ,k),np.nan)
     return v
 def combo(tot,typ,a,b):
     p35=pr(typ,a,b,'35'); p17=pr(typ,a,b,'17'); best=None
